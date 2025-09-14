@@ -250,6 +250,77 @@ k4.metric("New Customers", f"{int(new_customers):,}" if not np.isnan(new_custome
 
 st.markdown("---")
 
+# ---------- DAILY PERCENTAGE TRENDS ----------
+st.subheader("Daily % Change Trends")
+
+if not filtered_total_marketing_daily.empty:
+    df_daily = filtered_total_marketing_daily.copy()
+    df_daily = df_daily.sort_values("date")
+    for col in ["spend", "attributed revenue", "clicks"]:
+        if col in df_daily.columns:
+            df_daily[f"{col}_pct"] = df_daily[col].pct_change() * 100
+
+    fig_pct = go.Figure()
+    for col, label in [("spend_pct","Spend % Change"),("attributed revenue_pct","Revenue % Change"),("clicks_pct","Clicks % Change")]:
+        if col in df_daily.columns:
+            fig_pct.add_trace(go.Scatter(x=df_daily["date"], y=df_daily[col], mode="lines+markers", name=label))
+    fig_pct.update_layout(title="Daily % Change in Spend / Revenue / Clicks",
+                          yaxis=dict(title="% change"))
+    st.plotly_chart(fig_pct, use_container_width=True)
+else:
+    st.info("No daily data for % trend calculations.")
+
+# ---------- DAILY TOTAL SPEND & REVENUE ----------
+st.subheader("Daily Total Spend and Revenue")
+if not filtered_total_marketing_daily.empty:
+    fig_daily_totals = go.Figure()
+    fig_daily_totals.add_trace(go.Bar(x=filtered_total_marketing_daily["date"], y=filtered_total_marketing_daily["spend"], name="Spend"))
+    fig_daily_totals.add_trace(go.Bar(x=filtered_total_marketing_daily["date"], y=filtered_total_marketing_daily["attributed revenue"], name="Revenue"))
+    fig_daily_totals.update_layout(barmode="group", title="Daily Spend vs Revenue", xaxis_title="Date", yaxis_title="Amount ($)")
+    st.plotly_chart(fig_daily_totals, use_container_width=True)
+else:
+    st.info("No data for daily totals.")
+
+# ---------- WEEKLY TRENDS ----------
+st.subheader("Weekly Trends (Spend, Revenue, ROAS)")
+if not filtered_total_marketing_daily.empty:
+    df_weekly = filtered_total_marketing_daily.copy()
+    df_weekly["week"] = pd.to_datetime(df_weekly["date"]).dt.to_period("W").apply(lambda r: r.start_time)
+    weekly = df_weekly.groupby("week", as_index=False).agg({"spend":"sum","attributed revenue":"sum","clicks":"sum"})
+    weekly["roas"] = weekly["attributed revenue"] / weekly["spend"]
+
+    fig_week = go.Figure()
+    fig_week.add_trace(go.Scatter(x=weekly["week"], y=weekly["spend"], mode="lines+markers", name="Weekly Spend"))
+    fig_week.add_trace(go.Scatter(x=weekly["week"], y=weekly["attributed revenue"], mode="lines+markers", name="Weekly Revenue"))
+    fig_week.update_layout(title="Weekly Spend vs Revenue", xaxis_title="Week", yaxis_title="Amount ($)")
+    st.plotly_chart(fig_week, use_container_width=True)
+
+    fig_roas = px.bar(weekly, x="week", y="roas", title="Weekly ROAS", text=weekly["roas"].round(2))
+    st.plotly_chart(fig_roas, use_container_width=True)
+else:
+    st.info("No weekly data available.")
+
+# ---------- PLATFORM SHARE (PERCENT CONTRIBUTION) ----------
+st.subheader("Platform Share of Spend and Revenue")
+if not filtered_daily_marketing.empty:
+    share = filtered_daily_marketing.copy()
+    share = share.sort_values("date")
+    # compute percentage of daily totals
+    for metric in ["spend","attributed revenue"]:
+        share[f"{metric}_share"] = share.groupby("date")[metric].transform(lambda x: x / x.sum() * 100)
+
+    fig_share_spend = px.area(share, x="date", y="spend_share", color="platform",
+                              title="Daily Platform Share of Spend (%)", groupnorm="percent")
+    st.plotly_chart(fig_share_spend, use_container_width=True)
+
+    fig_share_rev = px.area(share, x="date", y="attributed revenue_share", color="platform",
+                            title="Daily Platform Share of Revenue (%)", groupnorm="percent")
+    st.plotly_chart(fig_share_rev, use_container_width=True)
+else:
+    st.info("Not enough platform-level data for contribution analysis.")
+
+
+
 # ---------- Time Series: Spend vs Attributed Revenue ----------
 st.subheader("Time Series — Marketing Spend vs Attributed Revenue")
 time_df = filtered_marketing.groupby("date", as_index=False).agg({"spend":"sum","attributed revenue":"sum"})
